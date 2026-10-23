@@ -1,0 +1,15 @@
+{
+  "name": "qc-claude-skills",
+  "description": "QC skills for Claude Code",
+  "owner": {
+    "name": "Baskara Bagus"
+  },
+  "plugins": [
+    {
+      "name": "qc",
+      "description": "Negative, edge-case, fuzz, and security QC of APIs, apps, and libraries you own.",
+      "version": "1.0.0",
+      "source": "./"
+    }
+  ]
+}
