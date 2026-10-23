@@ -18,10 +18,13 @@ any third party. If you are unsure whether a target is in scope, ask.
 
 ## Non-destructive by default
 - Probes are **read-only** unless the user passes `--allow-writes`. Even then,
-  write-method payloads are the malformed/garbage kind meant to be *rejected*,
-  never valid data that would create or change records. If an endpoint might
-  mutate shared data, prefer a local service with a throwaway database.
-- There is a global request cap (`--max-requests`) and a per-request timeout.
+  write-method bodies are invalid variants meant to be *rejected* (malformed
+  JSON, missing or mistyped fields, out-of-range values), never a plain valid
+  record. But a target that wrongly accepts one has written it: that is the
+  finding, and it is also a write. So `--allow-writes` is for a local service
+  with a throwaway database only, and needs the user's yes.
+- There is a global request cap (`--max-requests`), a per-request timeout,
+  and an optional pause between requests (`--delay-ms`, use it on shared DEV).
   This is correctness testing, not load or stress testing. Do **not** remove the
   cap, loop the engine to generate volume, or run it to measure throughput.
   Denial-of-service and load testing are out of scope for these skills.
@@ -37,11 +40,13 @@ any third party. If you are unsure whether a target is in scope, ask.
   environment, by default `QC_TOKEN` (the profile may name another variable),
   for example copied from a logged-in app or an API client. The engine sends it
   as a bearer token. Without one, protected routes mostly return 401, which is
-  itself a useful signal that auth is enforced.
+  itself a useful signal that auth is enforced. Scope checks use a second
+  user's token (`QC_TOKEN_B`) the same way; ask for two ordinary test users,
+  never a real customer's session.
 
 ## What "security" covers here
 Authorization enforcement (missing / invalid / forged-unsigned / expired
-tokens), input validation of injection **markers** (confirming the API rejects
+tokens), whether one test user can read another test user's records, input validation of injection **markers** (confirming the API rejects
 or sanitises them rather than reflecting them or 500-ing), security response
 headers, and information leakage (stack traces, SQL errors in responses). These
 are standard defensive checks. The skills do not build working exploits, chain

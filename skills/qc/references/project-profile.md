@@ -15,7 +15,9 @@ Work from defaults and what the repo shows:
 | Start / stop | The repo's own run command (README, `Makefile`, `package.json`, `scripts/`), wrapped by `scripts/serve.sh`. |
 | Base URL and health path | From launch config or the start command's output; health = the OpenAPI path, or another route only this service serves. If the default port is taken by something else, pick a free one. |
 | OpenAPI | Auto-discovered by `probe.py` (common paths); else `--openapi` or an `--endpoints` list you write from the routes in code. |
-| Token variable | `QC_TOKEN`, sent as `Authorization: Bearer <token>`. |
+| Token variables | `QC_TOKEN` (user A), `QC_TOKEN_B` (user B, for scope checks), sent as `Authorization: Bearer <token>`. |
+| Real ids | None: path ids get placeholder values. Ask for one of user A's ids when scope matters. |
+| Accepted findings | None. |
 | Allowed remote hosts | None. Local only unless the user names a host. |
 | Report folder | `qc-reports/` in the project (the team decides whether to commit or ignore it), no frontmatter. |
 | Findings tracking | Offer a regression test per confirmed finding. |
@@ -50,9 +52,15 @@ leave out any that do not apply.
   keep-worthy tests move to `src/tests/unit/`.
 
 ## Auth
-- Token variable: `QC_TOKEN` (header `Authorization`, scheme `Bearer`).
-- Roles worth a second token for scope checks: admin vs. regular user.
+- Token variables: `QC_TOKEN` (user A), `QC_TOKEN_B` (user B); header
+  `Authorization`, scheme `Bearer`.
+- Which two users make a meaningful scope check (two tenants, or a regular
+  user and an admin), and real ids that belong to user A for `--value`.
 - Known data gaps that make a 403 expected, not a bug.
+
+## Accepted findings
+- File: `.claude/qc-accepted.json` (format in `probe.py --help`), passed as
+  `--accept` to probe.py and summarize.py. Each rule carries its reason.
 
 ## Environments
 - Allowed remote hosts for `--allow-host`: dev.example.internal

@@ -1,13 +1,11 @@
 ---
 name: qc-fuzz
 description: >-
-  Use when the user wants an API endpoint or service, an app's parsers, or a
-  library they own bombarded with many randomised and malformed inputs to find
-  crashes, 500s, or hangs — or says "fuzz", "fuzz test", "throw random data at
-  it", "hammer this endpoint with junk", "property test the parser". This is
-  bounded correctness fuzzing, never load or denial-of-service testing. Single
-  invalid inputs: qc-negative. Named boundaries: qc-edge. Authz and injection:
-  qc-security. All four at once: qc.
+  Use when the user wants an endpoint, service, parser, or library they own
+  hit with many random and malformed inputs to find crashes, 500s, or hangs,
+  or says "fuzz", "throw random data at it", "property test the parser".
+  Bounded correctness fuzzing, never load or DoS testing. Single bad inputs:
+  qc-negative. Boundaries: qc-edge. Authz: qc-security. All: qc.
 ---
 
 # Fuzz testing
@@ -27,38 +25,40 @@ throughput. Then `<qc>/references/targets.md`, and the project's
 
 ```bash
 eval "$(bash <qc>/scripts/serve.sh up --name <svc> --url <url> --health <openapi-path> --start '<cmd>')"  # BASE, STARTED
+[[ -n "${BASE:-}" ]] || exit 1
+# probe.py sends QC_TOKEN whenever it is set: for an unauthenticated run, `unset QC_TOKEN` first
 python3 <qc>/scripts/probe.py --base "$BASE" --mode fuzz \
   --out "<scratchpad>/qc-<svc>-fuzz.json" --iterations 30 --max-requests 400 \
-  [--only /api/<group>] [--seed 1337]
+  [--only /api/<group>] [--seed 1337] [--allow-writes]
 [[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>
+python3 <qc>/scripts/summarize.py "<scratchpad>/qc-<svc>-fuzz.json"
 ```
 
-`--iterations` is randomised requests per endpoint, `--seed` makes a run
-reproducible, `--max-requests` is the hard cap. The generator mixes random
-strings, extreme numbers, injection/overflow/unicode markers, and empty or
-null-ish values across query params and path ids. Write routes are only
-included with `--allow-writes`, against a throwaway local DB. The token in
-`QC_TOKEN`, if exported, is sent as the bearer token; `--fail-on-flags` gives
-exit 1.
+Requests per endpoint = `--iterations`, until `--max-requests` (the hard cap)
+runs out. `--seed` makes a run reproducible. The generator mixes random
+strings, extreme numbers, injection/overflow/unicode markers, and null-ish
+values across query params and path ids. With `--allow-writes` (local
+throwaway DB only), write routes get the schema's valid body with random
+fields replaced by junk of random types; each result keeps the body it sent.
 
-Judge the JSON: any `server-error` or `exception-leak` flag is a finding.
-Record the triggering request and the seed so it reproduces. Clean 4xx across
-the random inputs is the pass.
+Judge from the summary: any `server-error`, `exception-leak`, `timeout`, or
+`no-response` is a finding. Record the replay line and the seed. Clean 4xx
+across the random inputs is the pass.
 
 ## Code targets
 
-Property-style, per the targets reference: write a short temporary test in a
-`qc_tmp` folder inside the project that generates many seeded random inputs
-and feeds them to parsers and validators, asserting each parses or throws a
-*handled* error, never crashes the process or test worker. Use the project's
-property-testing library if it already has one (Go has native `go test
--fuzz`); otherwise a seeded loop. Run the existing suite first; delete the
-temporary test afterwards unless the user wants it kept.
+Property-style, per the targets reference: copy the stack's template from
+`<qc>/templates/` into a `qc_tmp` folder inside the project and fill its fuzz
+group with the parsers and validators in scope, asserting each input parses
+or throws a *handled* error, never crashes the process or test worker. Use
+the project's property-testing library if it already has one (Go has native
+`go test -fuzz`). Run the existing suite first; delete the temporary test
+afterwards unless the user wants it kept.
 
 ## Report
 One report via `<qc>/references/report-template.md`
 (`<report folder>/<date>-<target>-fuzz.md`). Every finding carries its seed
-and triggering input. Offer to turn confirmed crashers into tracked work.
+and replay line. Offer to turn confirmed crashers into tracked work.
 
 ## Common mistakes
 - Raising `--max-requests` to "fuzz harder": more iterations on a scoped

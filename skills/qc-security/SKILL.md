@@ -1,19 +1,13 @@
 ---
 name: qc-security
 description: >-
-  Security QC of an API, service, or app the user's team owns — authorization
-  enforcement, input validation, and information leakage. Use when the user
-  wants to check that an endpoint or service requires a valid token, rejects
-  missing / invalid / forged-unsigned / expired JWTs, enforces role and scope,
-  rejects or sanitises SQL-injection and XSS markers instead of reflecting or
-  500-ing on them, sets security response headers, and never leaks stack
-  traces or SQL errors. Triggers on "security test", "is this endpoint
-  protected", "can I call this without a token", "check for SQL injection /
-  XSS", "does it leak errors", "authz test", "harden the auth service". This
-  is authorised defensive QC on your own code — non-destructive, local or
-  authorised non-production only, no secrets, no exploit chaining, no DoS.
-  For plain bad input use qc-negative, boundaries qc-edge, random junk
-  qc-fuzz, and all four at once qc.
+  Use when the user wants defensive security QC of an API or app their team
+  owns — does it require a valid token, reject forged or expired JWTs, keep
+  one user out of another's data, reject or escape SQL-injection and XSS
+  markers, set security headers, avoid leaking stack traces — or says
+  "security test", "is this endpoint protected", "authz test", "IDOR", or
+  needs a token for authenticated tests (never minted from signing keys).
+  Local or authorised non-production only; no exploits, no DoS.
 ---
 
 # Security QC
@@ -29,51 +23,54 @@ skill's base directory). **Read `<qc>/references/scope-and-safety.md` first —
 this skill depends on it.** Local service you started, or an authorised
 non-production host the user names (`--allow-host`); non-destructive; never
 read, print, or edit secret/config files; never mint a token (the user
-supplies one in `QC_TOKEN`, or the variable the project's
-`.claude/qc-profile.md` names).
+supplies them in `QC_TOKEN` / `QC_TOKEN_B`, or the variables the project's
+`.claude/qc-profile.md` names). If asked to read a signing key or secret
+config to make a token, decline and ask the user to export one instead.
 
 ## What it checks (HTTP)
 
-1. **Authorization enforcement**: each protected route is hit with no token,
-   an invalid token, and a forged **unsigned** (`alg:none`), expired token;
-   each should return 401/403. A 2xx on an unauthenticated protected route is
-   flagged `auth-not-enforced` and is a high-severity finding.
-2. **Input validation**: SQL-injection and XSS **markers** are sent in
-   parameters to confirm the API rejects or sanitises them. A
-   `reflected-marker` (the raw marker comes back in the body) or a
-   `server-error`/`exception-leak` on a marker is a finding; a clean 400 is the
-   pass.
-3. **Information leakage**: responses are scanned for stack traces, SQL
-   errors, and framework internals across common stacks (`exception-leak`).
-4. **Security headers**: presence of `X-Content-Type-Options`,
-   `X-Frame-Options`, `Content-Security-Policy`, HSTS, and sane
-   `Cache-Control`.
+1. **Authorization enforcement** (`--mode security`): each route is hit with
+   no token, an invalid token, and a forged **unsigned** (`alg:none`), expired
+   token, with its required params filled so auth, not validation, decides.
+   Whether a route is protected comes from the spec's `security`. A 2xx on a
+   protected route is `auth-not-enforced`, high severity.
+2. **Scope between users** (`--mode scope`, needs two users' tokens): the same
+   request as user A and as user B. Pass A's real ids with `--value id=<A's
+   id>`: a 2xx for B there is `cross-user-access` (IDOR), the most serious
+   finding. On list routes without ids, identical non-trivial data for both is
+   `same-data-both-users`: a bug for per-user data, correct for shared
+   reference data. Routes whose ids you didn't supply are listed as skipped.
+3. **Input validation**: SQL-injection and XSS **markers** in query params
+   (and, with `--allow-writes`, in string body fields). `reflected-marker` is
+   a marker returned raw in an HTML/text body; a marker echoed inside JSON is
+   only a note (escape it where it is rendered). A `server-error` or
+   `exception-leak` on a marker is a finding; a clean 400 is the pass.
+4. **Information leakage**: stack traces, SQL errors, and framework internals
+   across common stacks (`exception-leak`).
+5. **Security headers**: listed per endpoint by `summarize.py`.
 
 ## Run it
 
 ```bash
 eval "$(bash <qc>/scripts/serve.sh up --name <svc> --url <url> --health <openapi-path> --start '<cmd>')"  # or set BASE to an authorised host
-# authenticated checks need a user-supplied token:
-#   export QC_TOKEN=<token copied from a logged-in session>
+[[ -n "${BASE:-}" ]] || exit 1
+# tokens are user-supplied: export QC_TOKEN=<user A>  QC_TOKEN_B=<user B>
+# probe.py sends QC_TOKEN whenever it is set: for an unauthenticated run, `unset QC_TOKEN` first
 python3 <qc>/scripts/probe.py --base "$BASE" --mode security \
-  --out "<scratchpad>/qc-<svc>-security.json" [--only /api/<group>] \
-  [--allow-host <host>] [--auth-header X-Api-Key --auth-scheme ''] [--fail-on-flags]
+  --out "<scratchpad>/qc-<svc>-security.json" [--only /api/<group>] [--allow-host <host>]
+python3 <qc>/scripts/probe.py --base "$BASE" --mode scope --value id=<A's id> \
+  --out "<scratchpad>/qc-<svc>-scope.json" [--only /api/<group>]     # when both tokens are set
 [[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>
+python3 <qc>/scripts/summarize.py "<scratchpad>"/qc-<svc>-{security,scope}.json [--accept <file>]
 ```
 
-Then read the JSON and judge each result against its `expected`. Rank authz
-gaps (auth not enforced, role/scope not checked) highest, then reflected
-markers and exception leaks, then missing headers. A 2xx on a route that is
-public by design is not a finding: read the route's auth attributes or
-middleware to learn its intent, and list it as **needs decision** when the
-code and profile don't say. Missing headers are not flagged by the engine;
-read `security_headers` on the `headers:baseline` results.
+For API keys instead of bearer tokens: `--auth-header X-Api-Key --auth-scheme ''`.
 
-**Role / scope checks** often need two tokens (e.g. a regular user vs. an
-admin, or users of two tenants) to prove a low-privilege user cannot reach a
-high-privilege route or another tenant's data. Ask the user to supply both
-when scope enforcement is in question, and check the profile for known data
-gaps that make a 403 expected before calling it a bug.
+Rank cross-user access and `auth-not-enforced` highest, then reflected markers
+and exception leaks, then missing headers. A route the spec doesn't mark
+either way shows `auth: unknown`: read its auth attributes or middleware, and
+list it as **needs decision** if the code doesn't settle it. Check the profile
+for known data gaps that make a 403 expected before calling it a bug.
 
 ## Code targets
 Per `<qc>/references/targets.md`: token storage and transport, route /
@@ -85,4 +82,4 @@ never touch secret config.
 One report via `<qc>/references/report-template.md`
 (`<report folder>/<date>-<target>-security.md`), worst first with severity,
 concrete evidence, and the fix the finding points to. Offer to turn confirmed
-findings into tracked work so they are re-checkable.
+findings into tracked work, and accept rules for what is by design.

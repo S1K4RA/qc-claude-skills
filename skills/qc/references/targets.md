@@ -20,7 +20,8 @@ directory when the `qc` skill is loaded, or `../qc` next to any focused skill.
    `--health` must be a path only this service serves; a service is reused
    only when it answers 2xx there, and `up` fails if another program holds
    the port. Pass `--state-dir <scratchpad>` to keep its state and log out of
-   `$TMPDIR`.
+   `$TMPDIR`. When the usual port is taken by something else, `--free-port`
+   picks another and fills `{port}` in `--start`/`--stop`.
    Stop only what it started: `[[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>`.
    If the project has its own start/stop wrapper that daemonises, pass it as
    `--start` and its stop command as `--stop`. For an authorised remote host,
@@ -30,20 +31,38 @@ directory when the `qc` skill is loaded, or `../qc` next to any focused skill.
    ```bash
    python3 <qc>/scripts/probe.py --base "$BASE" --mode <mode> \
      --out "<scratchpad>/qc-<svc>-<mode>.json" [--only /api/orders] \
-     [--openapi <url-or-file>] [--allow-host <dev-host>] [--allow-writes] [--fail-on-flags]
+     [--value id=<real id>] [--accept <file>] [--openapi <url-or-file>] \
+     [--allow-host <dev-host>] [--allow-writes] [--delay-ms 100] [--fail-on-flags]
    ```
    The OpenAPI document is auto-discovered at the common paths; without one,
    pass `--openapi <file>` or write an `--endpoints` list from the routes in
    code (format in `probe.py --help`). `--only` narrows to a path substring.
-   The token in `QC_TOKEN` (or `--token-env <VAR>`) is sent as a bearer token.
-   `--allow-writes` adds POST/PUT/PATCH/DELETE routes with garbage payloads
-   meant to be rejected: only against a local throwaway database.
-   `--fail-on-flags` turns flags into exit 1 for one-command gates.
-3. **Read the JSON and judge.** The engine flags clear-cut problems
-   (`server-error`, `exception-leak`, `reflected-marker`, `auth-not-enforced`),
-   but findings come from comparing each result's `expected` to its
-   `status` and `body_snippet`. A 400 where a 400 was expected is a pass.
-4. **Scope by name.** When the user names a route group, an endpoint, or a
+   The engine resolves `$ref`s and uses each parameter's and body field's
+   schema (min/max, maxLength, enum, format) and each route's `security`.
+   `--value name=value` supplies real ids and required params so probes reach
+   the handler instead of a 404. The token in `QC_TOKEN` (or
+   `--token-env <VAR>`) is sent as a bearer token; `QC_TOKEN_B` is a second
+   user for `--mode scope`. `--allow-writes` adds POST/PUT/PATCH/DELETE routes
+   with invalid, schema-driven bodies meant to be rejected: only against a
+   local throwaway database, since an accepted one is a write.
+   `--delay-ms` spaces requests on a shared DEV host. `--fail-on-flags` turns
+   flags into exit 1 for one-command gates.
+3. **Summarise, then judge.**
+   ```bash
+   python3 <qc>/scripts/summarize.py "<scratchpad>"/qc-<svc>-*.json [--accept <file>] \
+     [--baseline <earlier JSON>...] [--fail-on-new]
+   ```
+   It groups results by endpoint × probe × flag with a replay line each, shows
+   the status mix per endpoint (clean coverage), missing security headers,
+   notes, skipped endpoints, and whether the request cap cut the run short.
+   With `--baseline` it lists New / Fixed / Still failing; `--fail-on-new`
+   makes that a regression gate. Flags are heuristics (`probe.py --help`
+   lists them all): judge each against the route's intent. Open the raw JSON
+   only for the rows the summary points to.
+4. **Accept what is by design.** Findings the team accepts (a public route,
+   a header a gateway adds) go in an accept file, listed in the profile, so
+   later runs and gates stay quiet about them. Format: `probe.py --help`.
+5. **Scope by name.** When the user names a route group, an endpoint, or a
    project-specific endpoint ID, map it to a path prefix (the profile says
    where IDs are mapped) and pass `--only`.
 
@@ -56,6 +75,11 @@ For client apps, libraries, CLIs, and the server's own units: exercise parsing,
 validation, and state logic with hostile inputs.
 
 - **Baseline first**: run the existing suite, so new failures are yours.
+- **Start from a template.** `<qc>/templates/` has a seeded hostile-input
+  generator with negative, edge, and fuzz groups for Dart/Flutter
+  (`hostile_inputs_test.dart`) and Vitest/Jest (`hostile_inputs.test.ts`);
+  copy it, fill its TODOs with the unit in scope. For other stacks, port the
+  same shape.
 - **Temporary tests live inside the project**, because runners only collect
   files under it and imports only resolve there. Use a `qc_tmp` folder in the
   test root, run just that folder, and delete it after reporting unless the

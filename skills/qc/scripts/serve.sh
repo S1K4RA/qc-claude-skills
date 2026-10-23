@@ -10,13 +10,15 @@
 #   eval "$(bash serve.sh up --name api --url http://localhost:5040 \
 #            --health /openapi.json [--expect '"openapi"'] \
 #            [--start '<command>'] [--stop '<command>'] [--cwd <dir>] \
-#            [--timeout 120] [--state-dir <dir>])"
+#            [--free-port] [--timeout 120] [--state-dir <dir>])"
 #   bash serve.sh down --name api [--state-dir <dir>]
 #
 # Pick a --health path only your service serves (its OpenAPI document is
 # ideal). A service is reused only when that path returns 2xx/3xx (and its
 # body contains --expect, if given). Anything else answering on the port is a
-# different program: up fails instead of probing the wrong target.
+# different program: up fails instead of probing the wrong target, unless
+# --free-port is given: then it picks a free port, puts it in the URL, and
+# substitutes it for {port} in --start and --stop.
 #
 # --start runs in the background in its own process group; `down` kills that
 # group. When the project's own start command daemonises itself (returns at
@@ -25,10 +27,10 @@
 # skip this, set BASE yourself, and pass --allow-host to probe.py.
 set -euo pipefail
 
-usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 [[ $# -ge 1 ]] || usage
 cmd="$1"; shift
-NAME="" URL="" START="" STOP="" CWD="$PWD" HEALTH="/" EXPECT="" TIMEOUT=120
+NAME="" URL="" START="" STOP="" CWD="$PWD" HEALTH="/" EXPECT="" TIMEOUT=120 FREE=0
 STATE_DIR="${QC_STATE_DIR:-${TMPDIR:-/tmp}}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,6 +43,7 @@ while [[ $# -gt 0 ]]; do
     --expect) EXPECT="$2"; shift 2;;
     --state-dir) STATE_DIR="$2"; shift 2;;
     --timeout) TIMEOUT="$2"; shift 2;;
+    --free-port) FREE=1; shift;;
     -h|--help|help) usage;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -70,10 +73,17 @@ case "$cmd" in
       printf 'BASE=%s\nSTARTED=0\n' "$URL"; exit 0
     fi
     if [[ "$CODE" != "000" ]]; then
-      echo "something else answers at $URL (HTTP $CODE on $HEALTH${EXPECT:+, or body lacks '$EXPECT'}):" >&2
-      echo "not $NAME. Pick a free port, or stop that program yourself." >&2
-      exit 1
+      echo "something else answers at $URL (HTTP $CODE on $HEALTH${EXPECT:+, or body lacks '$EXPECT'}): not $NAME." >&2
+      if [[ "$FREE" != 1 || "$START" != *"{port}"* ]]; then
+        echo "Pick a free port, pass --free-port with {port} in --start, or stop that program yourself." >&2
+        exit 1
+      fi
+      port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+      URL=$(printf '%s' "$URL" | sed -E "s#:[0-9]+\$#:$port#")
+      echo "using free port $port instead" >&2
     fi
+    port=$(printf '%s' "$URL" | sed -nE 's#.*:([0-9]+)$#\1#p')
+    START="${START//\{port\}/$port}"; STOP="${STOP//\{port\}/$port}"
     [[ -n "$START" ]] || { echo "$URL is not answering and no --start command was given" >&2; exit 1; }
     echo "starting $NAME: $START (log: $STATE.log)" >&2
     set -m  # background job gets its own process group, so down can kill the tree

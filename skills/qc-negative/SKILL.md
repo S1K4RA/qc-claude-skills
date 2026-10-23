@@ -1,18 +1,17 @@
 ---
 name: qc-negative
 description: >-
-  Use when the user wants to check how an API endpoint or service, an app, or
-  a library they own behaves on invalid input — wrong HTTP method, missing
-  required fields, wrong types, malformed JSON, bad auth — or says "negative
-  test", "error paths", "does it reject bad input", "fail gracefully", "send
-  garbage to this endpoint". Boundary values: qc-edge. Random junk at volume:
-  qc-fuzz. Authz and injection: qc-security. All four at once: qc.
+  Use when the user wants to check how an endpoint, service, app, or library
+  they own handles invalid input — wrong method, missing required fields,
+  wrong types, malformed JSON — or says "negative test", "error paths", "does
+  it reject bad input", "fail gracefully". Boundaries: qc-edge. Random junk:
+  qc-fuzz. Authz and injection: qc-security. All four: qc.
 ---
 
 # Negative testing
 
 Confirms a target **refuses invalid input correctly**: the right 4xx, a clear
-message, no server error, no accidental success. A 500, or a 200 where a 400
+message, no server error, no accidental success. A 500, or a 2xx where a 400
 was due, is the bug.
 
 `<qc>` is the `qc` skill's directory, next to this one (`../qc` from this
@@ -24,28 +23,32 @@ if it has one.
 
 ```bash
 eval "$(bash <qc>/scripts/serve.sh up --name <svc> --url <url> --health <openapi-path> --start '<cmd>')"  # BASE, STARTED
+[[ -n "${BASE:-}" ]] || exit 1
+# probe.py sends QC_TOKEN whenever it is set: for an unauthenticated run, `unset QC_TOKEN` first
 python3 <qc>/scripts/probe.py --base "$BASE" --mode negative \
-  --out "<scratchpad>/qc-<svc>-negative.json" [--only /api/<group>]
+  --out "<scratchpad>/qc-<svc>-negative.json" [--only /api/<group>] [--allow-writes]
 [[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>
+python3 <qc>/scripts/summarize.py "<scratchpad>/qc-<svc>-negative.json"
 ```
 
-`<scratchpad>` is the session's scratchpad or another temp directory. Probes:
-wrong method, missing *required* query params, wrong type on typed params, and
-(only with `--allow-writes`, only against a throwaway local DB) malformed
-bodies on write routes. The token in `QC_TOKEN`, if exported, is sent as the
-bearer token. `--fail-on-flags` gives exit 1 on any flagged result.
+Probes: wrong method, non-numeric ids where the spec says integer, missing
+*required* query params, wrong types on typed params. With `--allow-writes`
+(local throwaway DB only), write routes also get malformed JSON and
+schema-driven bodies: an empty object, each required field dropped, each field
+given the wrong type. Every one of these is invalid, so a 2xx is flagged
+`accepted-invalid`.
 
-Then read the JSON. A finding is a `5xx`, an `exception-leak` flag, or a `2xx`
-where invalid input should have been rejected. A correct 400/404/405/422 is a
-pass: it goes in the coverage summary, not the findings.
+Judge from the summary. A finding is a `server-error`, `exception-leak`, or
+`accepted-invalid`. A correct 400/404/405/422 is a pass and goes in the
+coverage summary.
 
 ## Code targets
 
-Per the targets reference: run the existing suite first, then write short
-temporary tests in a `qc_tmp` folder inside the project that feed missing
-fields, wrong types, nulls, and malformed API responses to parsers,
-validators, and stores. Delete them afterwards unless the user wants them
-kept.
+Per the targets reference: run the existing suite first, then copy the
+stack's template from `<qc>/templates/` into a `qc_tmp` folder inside the
+project and fill its negative group for the parsers, validators, and stores in
+scope (missing fields, wrong types, nulls, malformed API responses). Delete it
+afterwards unless the user wants the tests kept.
 
 ## Report
 One report via `<qc>/references/report-template.md`
@@ -54,4 +57,5 @@ coverage summary. Offer to turn confirmed failures into tracked work.
 
 ## Common mistakes
 - Calling a 401 a failure when no token was exported: that is auth working.
+  Body probes need a token for protected write routes, or they only test auth.
 - Running `--allow-writes` against shared data.

@@ -2,11 +2,10 @@
 name: qc
 description: >-
   Use when the user wants an API, service, endpoint, app, or library they own
-  checked for bugs across every kind of hostile input at once — negative,
-  edge-case, fuzz, and security — or says "QC", "quality check", "find bugs
-  in", "break", "hammer", or "harden" a target, or wants a feature validated
-  before release or before closing a change. For one kind only, use
-  qc-negative, qc-edge, qc-fuzz, or qc-security instead.
+  checked for bugs across every kind of hostile input at once, or says "QC",
+  "quality check", "find bugs in", "break", "harden", or "re-check the QC
+  fixes", or wants a feature validated before release or before closing a
+  change. For one kind only: qc-negative, qc-edge, qc-fuzz, qc-security.
 ---
 
 # QC sweep (all four types)
@@ -17,7 +16,8 @@ coordinates the four focused skills (`qc-negative`, `qc-edge`, `qc-fuzz`,
 standalone.
 
 In this skill, `<qc>` is this skill's base directory: the scripts are in
-`<qc>/scripts/`, the references in `<qc>/references/`.
+`<qc>/scripts/`, the references in `<qc>/references/`, test templates in
+`<qc>/templates/`.
 
 **Read `<qc>/references/scope-and-safety.md` before probing.** It defines the
 hard lines: local or authorised non-production targets only, non-destructive
@@ -26,9 +26,10 @@ by default, no load/DoS, never handle secrets.
 ## 1. Load the project profile
 
 Read `.claude/qc-profile.md` (or `qc-profile.md`) in the project if it exists.
-It names the targets, how to start them, the token variable, allowed hosts,
-the report folder, and how findings are tracked. Without one, use the defaults
-in `<qc>/references/project-profile.md` and discover the rest from the repo.
+It names the targets, how to start them, the token variables, real ids for
+`--value`, the accepted-findings file, allowed hosts, the report folder, and
+how findings are tracked. Without one, use the defaults in
+`<qc>/references/project-profile.md` and discover the rest from the repo.
 
 ## 2. Pin down target and scope
 
@@ -40,8 +41,11 @@ in `<qc>/references/project-profile.md` and discover the rest from the repo.
 - **Environment**: a local service (default) or an authorised non-production
   host the user names.
 - **Auth**: `probe.py` sends the token variable (`QC_TOKEN` by default)
-  whenever it is set in the environment. For an unauthenticated run, `unset`
-  it first; `meta.authenticated` in the JSON shows which run you got.
+  whenever it is set. For an unauthenticated run, `unset` it first;
+  `meta.authenticated` shows which run you got. A second user's token
+  (`QC_TOKEN_B`) unlocks the scope check in `qc-security`.
+- **Writes**: body probes of POST/PUT/PATCH/DELETE run only with
+  `--allow-writes`, against a local throwaway database. Ask before using it.
 
 `<qc>/references/targets.md` says how each kind of target is tested per type.
 
@@ -52,56 +56,64 @@ They are independent, so run them concurrently:
 - **With subagents** (preferred): dispatch four agents in one turn, one per
   focused skill, same target and scope; each returns its findings and the path
   to its raw results.
-- **HTTP shortcut**: bring the service up once, then launch the four
-  `probe.py` modes together. Give each a distinct `--out` in the session's
-  scratchpad. `--max-requests` is a cap per process, so 150 here means 150
-  per mode.
-- **Without subagents**: run the four in sequence; still one report.
+- **HTTP shortcut**: bring the service up once, then launch the probe modes
+  together, each with its own `--out` in the session's scratchpad.
+  `--max-requests` is a cap per process (150 below means 150 per mode).
+- **Without subagents**: run them in sequence; still one report.
 
 `--health` must be a path only the target serves (its OpenAPI document is
 ideal): `serve.sh` reuses a running service only when that path answers 2xx,
-and refuses when a different program holds the port. If it exits non-zero,
-`BASE` stays empty: read its message, and never probe a guessed URL.
+and refuses when a different program holds the port (`--free-port` picks
+another and fills `{port}` in `--start`). If it exits non-zero, `BASE` stays
+empty: read its message, and never probe a guessed URL.
 
 ```bash
 eval "$(bash <qc>/scripts/serve.sh up --name <svc> --url <url> --health <openapi-path> --start '<cmd>')"  # BASE, STARTED
 [[ -n "${BASE:-}" ]] || exit 1
 for m in negative edge fuzz security; do
-  python3 <qc>/scripts/probe.py --base "$BASE" --mode $m \
+  python3 <qc>/scripts/probe.py --base "$BASE" --mode $m [--accept <file>] \
     --out "<scratchpad>/qc-<svc>-$m.json" --max-requests 150 &
 done; wait
 [[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>   # only stop what qc started
+python3 <qc>/scripts/summarize.py <scratchpad>/qc-<svc>-*.json [--accept <file>] \
+  [--baseline <earlier run JSON>...]
 ```
 
 ## 4. Judge the results
 
-The engine is black box; your judgement isn't. Read the target's source to
-decide what each route is meant to do: auth attributes or middleware, its
-validation, whether it is public by design.
+Read the summary first; open the raw JSON only for the rows it points to. The
+engine is black box; your judgement isn't. Read the target's source to decide
+what each route is meant to do: auth attributes or middleware, validation,
+whether it is public by design.
 
-- A result is a finding when it contradicts that intent: a flag, or a status
-  that differs from `expected`. When intent is unclear (is this route meant to
-  be public?), list it as **needs decision**, not as a bug.
-- Missing security headers are not flagged; read `security_headers` on the
-  `headers:baseline` results yourself.
-- Quote each result's `url` as the exact probe, so the finding replays. Fuzz
-  findings also need the run's seed (in `meta`).
-- Without `--allow-writes`, negative mode on a read-only API covers little
-  (wrong-type params and ids, missing required params). Say so in the
+- A result is a finding when it contradicts that intent. The engine already
+  takes auth from the spec's `security` (`auth` on each result); when a route
+  has no spec auth and the code doesn't settle it, list it as
+  **needs decision**, not as a bug.
+- `timeout` and `no-response` are crash or hang candidates: check whether the
+  service is still up before the next run.
+- Quote the summary's replay line (URL and body) as the exact probe. Fuzz
+  findings also need the run's seed.
+- If the summary says the request cap was reached, endpoints went unprobed:
+  narrow with `--only` and run again rather than raising the cap.
+- Without `--allow-writes`, write routes get no body probes. Say so in the
   coverage summary rather than implying full coverage.
+- **Re-checking fixes**: run the same modes, scope and seed, then pass the
+  earlier JSON as `--baseline`; report New / Fixed / Still failing.
 
 ## 5. One consolidated report
 
 Merge all findings into one report using `<qc>/references/report-template.md`
 (`<report folder>/<date>-<target>-all.md`): worst first across types, stable
 finding ids, and a no-issue coverage summary. Then offer to turn confirmed
-failures into tracked work (regression test, spec scenario, or issue, per the
-template and profile). Do not write them unasked.
+failures into tracked work (regression test, spec scenario, or issue), and
+offer accept rules for findings the team decides are by design. Do not write
+either unasked.
 
 ## Common mistakes
 - Stopping a service the user already had running: check `STARTED`.
-- Treating every flag as a bug: a 401 without a token, or a 200 on a public
-  route, is correct. Judge each result against its `expected`.
+- Treating every flag as a bug: a 2xx on a public route, or identical data
+  for two users on shared reference data, is correct.
 - Pointing at a remote host without `--allow-host`: the engine refuses, by
   design. Production is never in scope.
 - Writing probe JSON into the repo, or leaving temporary tests behind. The

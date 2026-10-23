@@ -16,6 +16,7 @@ One line: what was probed, which environment, with or without auth.
 - Mode(s): negative | edge | fuzz | security
 - Requests: <n> over <m> endpoints · authenticated: yes/no · writes: off/on · seed: <n>
 - Raw results: <path to the probe JSON or test output>
+- Summary: `summarize.py` output (and the baseline it was compared with, if any)
 
 ## Findings
 Ranked worst first. One subsection per finding, with a stable finding id.
@@ -28,13 +29,19 @@ Ranked worst first. One subsection per finding, with a stable finding id.
 - Why it matters: <impact in one or two sentences>
 
 ## No-issue summary
-What was probed and came back clean, so a later reader knows the coverage.
+What was probed and came back clean, so a later reader knows the coverage
+(the summary's "Coverage by endpoint" table), and what was *not* probed:
+write routes without `--allow-writes`, scope routes skipped for lack of ids,
+endpoints past the request cap.
+
+## Re-check (when compared with a baseline)
+New / Fixed / Still failing, by finding id.
 ```
 
-Severity guide: **high** for auth not enforced, role/scope bypass, data from
-another tenant, stack traces or SQL errors to clients, crashes on plausible
-input. **med** for 500s on malformed input, reflected markers, wrong success
-codes on invalid input. **low** for missing security headers, unhelpful error
+Severity guide: **high** for auth not enforced, cross-user access, role or
+scope bypass, data from another tenant, stack traces or SQL errors to clients, crashes on plausible
+input. **med** for 500s on malformed input, reflected markers, accepted-invalid
+input, timeouts. **low** for missing security headers, unhelpful error
 messages, inconsistent status codes.
 
 ## Turning findings into tracked work

@@ -14,9 +14,10 @@ and replace what differs.
 
 ## Bring up an HTTP target
 - be: one service per run, named by its short name (Orders, Auth, Catalog).
-  start: `scripts/be.sh run <Svc>` (cwd: the hub); it daemonises and prints
-  `http://localhost:<port>`, so pass it to serve.sh with
-  `--stop 'scripts/be.sh stop <Svc>'`. `scripts/be.sh ps` lists what is up.
+  start: `scripts/be.sh run <Svc> --port {port}` (cwd: the hub); it
+  daemonises, so pass `--stop 'scripts/be.sh stop <Svc>'` too, and
+  `--free-port` when the default port is taken. `scripts/be.sh ps` lists what
+  is up.
   health: `/swagger/v1/swagger.json`.
 - Endpoint IDs look like `AB012`. Map an ID to its route with the backend's
   `Documentation/API_ENDPOINT_IDS.md`, then pass the route prefix to `--only`.
@@ -29,14 +30,20 @@ and replace what differs.
   keep-worthy tests move to `src/tests/unit/`.
 
 ## Auth
-- Token variable: `PRODUCT_QC_TOKEN` (pass `--token-env PRODUCT_QC_TOKEN`),
-  header `Authorization`, scheme `Bearer`. Copy it from a logged-in app or
-  Postman session. Login decrypts credentials with keys from `appsettings`,
-  so never mint one.
-- Scope checks need two tokens: a sales user and an admin; dealer-scoped data
-  needs users from two dealers.
+- Token variables: `PRODUCT_QC_TOKEN` and `PRODUCT_QC_TOKEN_B` (pass
+  `--token-env PRODUCT_QC_TOKEN --token-env-b PRODUCT_QC_TOKEN_B`), header
+  `Authorization`, scheme `Bearer`. Copy them from logged-in app or Postman
+  sessions. Login decrypts credentials with keys from `appsettings`, so never
+  mint one.
+- Scope checks: user A and user B are sales users of two different dealers.
+  Ask for one of A's order ids and pass it as `--value id=<id>`.
 - Known DEV data gap: some sales users have no supervisor, so their dealer
   scope is empty and a 403 is expected.
+
+## Accepted findings
+- `.claude/qc-accepted.json`, passed as `--accept` to probe.py and
+  summarize.py. Holds the public-by-design routes (health, app version) and
+  the headers the API gateway adds in DEV.
 
 ## Environments
 - Allowed remote hosts for `--allow-host`: the team's DEV API host only.
