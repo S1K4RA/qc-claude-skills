@@ -778,7 +778,9 @@ def main():
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--timeout", type=float, default=8.0, help="seconds per request")
     ap.add_argument("--slow-ms", type=int, default=3000, help="flag answers slower than this")
-    ap.add_argument("--delay-ms", type=int, default=0, help="pause between requests")
+    ap.add_argument("--delay-ms", type=int, default=0,
+                    help="pause between requests, in ms (per process: parallel runs "
+                         "each pause on their own). Use it on a shared DEV host")
     ap.add_argument("--accept", help="JSON file of accepted findings (see above)")
     ap.add_argument("--allow-host", action="append", default=[])
     ap.add_argument("--fail-on-flags", action="store_true",
@@ -786,6 +788,9 @@ def main():
     args = ap.parse_args()
     TIMEOUT, SLOW_MS = args.timeout, args.slow_ms
 
+    if args.delay_ms < 0:
+        print("--delay-ms must be 0 or more", file=sys.stderr)
+        sys.exit(2)
     if not host_allowed(args.base, set(args.allow_host)):
         print(f"REFUSED: {args.base} is not localhost and not in --allow-host. "
               "Probes only run against a service you started or a host you "
@@ -843,7 +848,7 @@ def main():
             "endpoints": len(endpoints), "requests": caps.used,
             "cap_reached": caps.used >= caps.limit,
             "authenticated": bool(headers), "allow_writes": args.allow_writes,
-            "seed": args.seed, "flagged": len(flagged),
+            "seed": args.seed, "delay_ms": args.delay_ms, "flagged": len(flagged),
             "accepted": sum(1 for r in results if r.get("accepted_flags")),
             "auth_from_spec": sorted({e.get("auth", "unknown") for e in endpoints}),
             "skipped": ctx["skipped"],

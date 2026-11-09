@@ -19,6 +19,7 @@ Work from defaults and what the repo shows:
 | Real ids | None: path ids get placeholder values. Ask for one of user A's ids when scope matters. |
 | Accepted findings | None. |
 | Allowed remote hosts | None. Local only unless the user names a host. |
+| Request delay | 0 ms against a local service. On a shared remote host, ask; suggest 100–200 ms. |
 | Report folder | `qc-reports/` in the project (the team decides whether to commit or ignore it), no frontmatter. |
 | Findings tracking | Offer a regression test per confirmed finding. |
 
@@ -64,6 +65,9 @@ leave out any that do not apply.
 
 ## Environments
 - Allowed remote hosts for `--allow-host`: dev.example.internal
+- Request delay: 150 ms on dev.example.internal, 0 locally (passed as
+  `--delay-ms` to every probe run; with a delay, the sweep runs its modes one
+  after another so the delay holds across the whole run).
 - Never: production hosts.
 
 ## Secrets (never read)

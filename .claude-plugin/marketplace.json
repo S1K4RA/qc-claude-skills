@@ -8,7 +8,7 @@
     {
       "name": "qc",
       "description": "Negative, edge-case, fuzz, and security QC of APIs, apps, and libraries you own.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "source": "./"
     }
   ]

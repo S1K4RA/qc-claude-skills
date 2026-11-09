@@ -3,6 +3,18 @@
 Bump `version` in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
 with every release, or `/plugin update` will not pick it up.
 
+## 1.2.0 — 2026-11-09
+
+- **Request delay in the profile**: `## Environments` takes a per-host
+  `Request delay` that every skill passes to probe.py as `--delay-ms`. With no
+  profile, the delay is 0 locally, and on a shared remote host the skill asks
+  (suggesting 100–200 ms).
+- The `qc` sweep runs its probe modes one after another when a delay is set,
+  because `--delay-ms` applies per process and four parallel runs would reach
+  the host at four times the rate.
+- probe.py records `delay_ms` in `meta` and refuses a negative delay;
+  summarize.py shows it in the Runs table.
+
 ## 1.1.0 — 2026-10-23
 
 - **Body probes**: write routes get schema-driven invalid bodies (empty object,

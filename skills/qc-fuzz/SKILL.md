@@ -29,7 +29,7 @@ eval "$(bash <qc>/scripts/serve.sh up --name <svc> --url <url> --health <openapi
 # probe.py sends QC_TOKEN whenever it is set: for an unauthenticated run, `unset QC_TOKEN` first
 python3 <qc>/scripts/probe.py --base "$BASE" --mode fuzz \
   --out "<scratchpad>/qc-<svc>-fuzz.json" --iterations 30 --max-requests 400 \
-  [--only /api/<group>] [--seed 1337] [--allow-writes]
+  [--only /api/<group>] [--seed 1337] [--allow-writes] [--delay-ms <ms>]
 [[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>
 python3 <qc>/scripts/summarize.py "<scratchpad>/qc-<svc>-fuzz.json"
 ```

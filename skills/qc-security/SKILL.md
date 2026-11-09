@@ -57,9 +57,9 @@ eval "$(bash <qc>/scripts/serve.sh up --name <svc> --url <url> --health <openapi
 # tokens are user-supplied: export QC_TOKEN=<user A>  QC_TOKEN_B=<user B>
 # probe.py sends QC_TOKEN whenever it is set: for an unauthenticated run, `unset QC_TOKEN` first
 python3 <qc>/scripts/probe.py --base "$BASE" --mode security \
-  --out "<scratchpad>/qc-<svc>-security.json" [--only /api/<group>] [--allow-host <host>]
+  --out "<scratchpad>/qc-<svc>-security.json" [--only /api/<group>] [--allow-host <host>] [--delay-ms <ms>]
 python3 <qc>/scripts/probe.py --base "$BASE" --mode scope --value id=<A's id> \
-  --out "<scratchpad>/qc-<svc>-scope.json" [--only /api/<group>]     # when both tokens are set
+  --out "<scratchpad>/qc-<svc>-scope.json" [--only /api/<group>] [--delay-ms <ms>]  # when both tokens are set
 [[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>
 python3 <qc>/scripts/summarize.py "<scratchpad>"/qc-<svc>-{security,scope}.json [--accept <file>]
 ```

@@ -96,13 +96,13 @@ def main():
     found = findings(runs, rules)
     lines = ["# QC run summary", ""]
 
-    lines += ["## Runs", "", "| file | mode | requests | endpoints | cap reached | auth | writes | seed | flagged | accepted |",
-              "|---|---|---|---|---|---|---|---|---|---|"]
+    lines += ["## Runs", "", "| file | mode | requests | endpoints | cap reached | auth | writes | seed | delay ms | flagged | accepted |",
+              "|---|---|---|---|---|---|---|---|---|---|---|"]
     for path, run in runs:
         m = run["meta"]
         lines.append(f"| {os.path.basename(path)} | {m['mode']} | {m['requests']} | {m['endpoints']} | "
                      f"{'yes' if m.get('cap_reached') else 'no'} | {'yes' if m['authenticated'] else 'no'} | "
-                     f"{'on' if m['allow_writes'] else 'off'} | {m.get('seed')} | {m['flagged']} | {m.get('accepted', 0)} |")
+                     f"{'on' if m['allow_writes'] else 'off'} | {m.get('seed')} | {m.get('delay_ms', 0)} | {m['flagged']} | {m.get('accepted', 0)} |")
     skipped = [s for _, run in runs for s in run["meta"].get("skipped", [])]
     if skipped:
         lines += ["", "Skipped (pass `--value` for these): " + "; ".join(

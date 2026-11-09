@@ -24,7 +24,8 @@ any third party. If you are unsure whether a target is in scope, ask.
   finding, and it is also a write. So `--allow-writes` is for a local service
   with a throwaway database only, and needs the user's yes.
 - There is a global request cap (`--max-requests`), a per-request timeout,
-  and an optional pause between requests (`--delay-ms`, use it on shared DEV).
+  and an optional pause between requests (`--delay-ms`, set per host as the
+  profile's request delay; use it on shared DEV).
   This is correctness testing, not load or stress testing. Do **not** remove the
   cap, loop the engine to generate volume, or run it to measure throughput.
   Denial-of-service and load testing are out of scope for these skills.

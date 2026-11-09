@@ -216,7 +216,16 @@ class ProbeTest(unittest.TestCase):
         _, data, _ = self.probe("security", "--only", "/api/secure", "--max-requests", "4",
                                 "--delay-ms", "150")
         self.assertEqual(data["meta"]["requests"], 4)
+        self.assertEqual(data["meta"]["delay_ms"], 150)
         self.assertGreaterEqual(time.time() - t0, 0.3)
+
+    def test_negative_delay_refused(self):
+        p = subprocess.run([sys.executable, PROBE, "--base", "http://127.0.0.1:1",
+                            "--mode", "negative", "--delay-ms", "-5",
+                            "--out", os.path.join(self.tmp, "x.json")],
+                           capture_output=True, text=True)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--delay-ms", p.stderr)
 
     def test_refuses_remote_host(self):
         p = subprocess.run([sys.executable, PROBE, "--base", "http://example.com",

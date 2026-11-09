@@ -26,7 +26,8 @@ eval "$(bash <qc>/scripts/serve.sh up --name <svc> --url <url> --health <openapi
 [[ -n "${BASE:-}" ]] || exit 1
 # probe.py sends QC_TOKEN whenever it is set: for an unauthenticated run, `unset QC_TOKEN` first
 python3 <qc>/scripts/probe.py --base "$BASE" --mode edge \
-  --out "<scratchpad>/qc-<svc>-edge.json" [--only /api/<group>] [--allow-writes] [--value id=<real id>]
+  --out "<scratchpad>/qc-<svc>-edge.json" [--only /api/<group>] [--allow-writes] [--value id=<real id>] \
+  [--delay-ms <ms>]
 [[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>
 python3 <qc>/scripts/summarize.py "<scratchpad>/qc-<svc>-edge.json"
 ```

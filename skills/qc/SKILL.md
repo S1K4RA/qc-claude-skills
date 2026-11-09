@@ -27,8 +27,8 @@ by default, no load/DoS, never handle secrets.
 
 Read `.claude/qc-profile.md` (or `qc-profile.md`) in the project if it exists.
 It names the targets, how to start them, the token variables, real ids for
-`--value`, the accepted-findings file, allowed hosts, the report folder, and
-how findings are tracked. Without one, use the defaults in
+`--value`, the accepted-findings file, allowed hosts, the request delay, the
+report folder, and how findings are tracked. Without one, use the defaults in
 `<qc>/references/project-profile.md` and discover the rest from the repo.
 
 ## 2. Pin down target and scope
@@ -40,6 +40,9 @@ how findings are tracked. Without one, use the defaults in
   is the natural pre-release gate.
 - **Environment**: a local service (default) or an authorised non-production
   host the user names.
+- **Request delay**: the profile's delay for this host, else 0 locally. On a
+  shared remote host without one, ask (suggest 100–200 ms). Pass it as
+  `--delay-ms` to every probe run, including the subagents' runs.
 - **Auth**: `probe.py` sends the token variable (`QC_TOKEN` by default)
   whenever it is set. For an unauthenticated run, `unset` it first;
   `meta.authenticated` shows which run you got. A second user's token
@@ -59,6 +62,9 @@ They are independent, so run them concurrently:
 - **HTTP shortcut**: bring the service up once, then launch the probe modes
   together, each with its own `--out` in the session's scratchpad.
   `--max-requests` is a cap per process (150 below means 150 per mode).
+  So is `--delay-ms`: four parallel processes each pause on their own, so
+  the host sees four times the rate. When a delay is set, drop the `&` and
+  run the modes one after another.
 - **Without subagents**: run them in sequence; still one report.
 
 `--health` must be a path only the target serves (its OpenAPI document is
@@ -72,7 +78,7 @@ eval "$(bash <qc>/scripts/serve.sh up --name <svc> --url <url> --health <openapi
 [[ -n "${BASE:-}" ]] || exit 1
 for m in negative edge fuzz security; do
   python3 <qc>/scripts/probe.py --base "$BASE" --mode $m [--accept <file>] \
-    --out "<scratchpad>/qc-<svc>-$m.json" --max-requests 150 &
+    --out "<scratchpad>/qc-<svc>-$m.json" --max-requests 150 [--delay-ms <ms>] &
 done; wait
 [[ "$STARTED" == 1 ]] && bash <qc>/scripts/serve.sh down --name <svc>   # only stop what qc started
 python3 <qc>/scripts/summarize.py <scratchpad>/qc-<svc>-*.json [--accept <file>] \

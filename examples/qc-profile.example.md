@@ -47,6 +47,8 @@ and replace what differs.
 
 ## Environments
 - Allowed remote hosts for `--allow-host`: the team's DEV API host only.
+- Request delay: 200 ms on the DEV API host (shared with the app team);
+  0 against a local service.
 - Never: production or staging.
 
 ## Secrets (never read)

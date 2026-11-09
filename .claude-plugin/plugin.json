@@ -1,7 +1,7 @@
 {
   "name": "qc",
   "description": "QC skills for code you own: negative, edge-case, fuzz, and security testing of HTTP APIs (bounded, non-destructive probe engine) and of app/library code through its own test runner.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": {
     "name": "Baskara Bagus"
   },

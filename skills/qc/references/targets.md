@@ -45,8 +45,9 @@ directory when the `qc` skill is loaded, or `../qc` next to any focused skill.
    user for `--mode scope`. `--allow-writes` adds POST/PUT/PATCH/DELETE routes
    with invalid, schema-driven bodies meant to be rejected: only against a
    local throwaway database, since an accepted one is a write.
-   `--delay-ms` spaces requests on a shared DEV host. `--fail-on-flags` turns
-   flags into exit 1 for one-command gates.
+   `--delay-ms` spaces requests on a shared DEV host (the profile's request
+   delay; it applies per process, so parallel runs each pause separately).
+   `--fail-on-flags` turns flags into exit 1 for one-command gates.
 3. **Summarise, then judge.**
    ```bash
    python3 <qc>/scripts/summarize.py "<scratchpad>"/qc-<svc>-*.json [--accept <file>] \
